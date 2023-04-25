@@ -143,48 +143,40 @@ fn main() {
     // Render
     print!("P3\n{} {}\n255\n", image_width, image_height);
 
-    let mut lines: Vec<thread::JoinHandle<String>> = vec![];
+    let mut threads: Vec<Option<thread::JoinHandle<String>>> = vec![];
 
-    for j in (0..image_height).rev() {
+    for j in (-THREADS..image_height).rev() {
         let new_camera = camera.clone();
         let new_world = world.clone();
-
         let wait_for = image_height - j - THREADS;
 
-        // Don't look here
         if wait_for >= 0 {
-            let thread = &lines[wait_for as usize];
+            let thread = threads[wait_for as usize].take();
+            let line = thread.unwrap().join().unwrap();
+            print!("{}", line);
 
-            eprintln!(
-                "{} lines remaining, {:.2}%",
-                image_height - wait_for,
-                wait_for as f64 / image_height as f64 * 100.0
+            eprint!(
+                "\r{:.2}%, {} lines remaining",
+                wait_for as f64 / image_height as f64 * 100.0,
+                image_height - wait_for
             );
-
-            while !thread.is_finished() {
-                let mut child = Command::new("sleep").arg("1").spawn().unwrap();
-                child.wait().unwrap();
-            }
         }
 
-        lines.push(thread::spawn(move || {
-            render_line(
-                image_width,
-                image_height,
-                upscaling,
-                j,
-                new_camera,
-                new_world,
-            )
-        }));
+        if j < image_height {
+            threads.push(Some(thread::spawn(move || {
+                render_line(
+                    image_width,
+                    image_height,
+                    upscaling,
+                    j,
+                    new_camera,
+                    new_world,
+                )
+            })));
+        }
     }
-    for line in lines {
-        let text = line.join().unwrap();
-        print!("{}", text)
-    }
-
     let elapsed = now.elapsed();
-    eprintln!("Elapsed: {:.2?}", elapsed);
+    eprintln!("\nElapsed: {:.2?}", elapsed);
 }
 
 fn render_line(
